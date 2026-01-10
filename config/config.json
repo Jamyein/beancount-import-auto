@@ -1,0 +1,27 @@
+{
+    "openai": {
+        "api_key": "",
+        "api_base": "https://api.deepseek.com",
+        "model": "deepseek-chat"
+    },
+    "main_bean_file": "main.beancount",
+    "monthly_dir": "data",
+    "asset_mapping": {
+        "Alipay": "Assets:Alipay:Cash",
+        "wechat": "Assets:WeChat"
+    },
+    "my_accounts": [
+        "Expenses:Food",
+        "Expenses:Shopping",
+        "Expenses:Transport",
+        "Expenses:Housing",
+        "Expenses:Entertainment",
+        "Expenses:Health",
+        "Expenses:Car",
+        "Expenses:Other",
+        "Income:Salary",
+        "Income:RedPacket",
+        "Income:Refund",
+        "Equity:Opening-Balances"
+    ]
+}

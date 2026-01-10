@@ -1,0 +1,19 @@
+
+2026-01-01 open Equity:Opening-Balances
+2026-01-01 open Assets:Alipay:Cash
+2026-01-01 open Assets:WeChat
+2026-01-01 open Expenses:Food
+2026-01-01 open Expenses:Shopping
+2026-01-01 open Expenses:Transport
+2026-01-01 open Expenses:Housing
+2026-01-01 open Expenses:Entertainment
+2026-01-01 open Expenses:Health
+2026-01-01 open Income:Salary
+2026-01-01 open Income:RedPacket
+2026-01-01 open Income:Refund
+
+; ====== Opening Balances ======
+
+2026-01-01 * "Opening Balance"
+  Assets:Alipay:Cash  10.0 CNY
+  Equity:Opening-Balances

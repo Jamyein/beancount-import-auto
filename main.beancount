@@ -1,0 +1,9 @@
+option "title" "我的私人账本"
+option "operating_currency" "CNY"
+
+; 1. 包含权益和初始余额设置
+include "equity.beancount"
+
+; 2. 包含脚本自动生成的月份账本
+; (Python 脚本会自动在下面追加 include "data/xxxx-xx.bean")
+
