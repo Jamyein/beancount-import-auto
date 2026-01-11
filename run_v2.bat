@@ -1,35 +1,38 @@
 @echo off
 setlocal enabledelayedexpansion
+chcp 65001 >nul
 cd /d "%~dp0"
 
 cls
 echo ==================================================
-echo     Beancount AI Bill Import Tool
+echo         Beancount AI 账单智能导入工具
 echo ==================================================
 echo.
 
 set i=0
 for /f "delims=" %%f in ('dir /b /a-d "bills\*.csv" "bills\*.xlsx" "bills\*.xls" "bills\*.pdf" 2^>nul') do (
     set /a i+=1
+    set "file!i!=%%f"
+    set "fullPath!i!=%~dp0bills\%%f"
     echo  [!i!] %%f
 )
 
 echo.
 if %i%==0 (
-    echo  No bills found
-    echo  [R] Refresh  [Q] Quit
+    echo  (当前 bills 文件夹为空)
+    echo  [R] 刷新  [Q] 退出
     echo.
-    set /p choice="Select: "
+    set /p choice="请选择: "
     if /i "%choice%"=="R" goto MENU
     if /i "%choice%"=="Q" exit /b
     goto MENU
 )
 
-echo -------------------------------------------------
-echo  Input number (1 3 5) or A for all
-echo -------------------------------------------------
+echo -----------------------------------------------------------
+echo  使用说明: 输入数字导入文件，输入 A 导入全部
+echo -----------------------------------------------------------
 echo.
-set /p choice="Input: "
+set /p choice="请输入文件编号: "
 
 if /i "%choice%"=="Q" exit /b
 if /i "%choice%"=="R" goto MENU
@@ -37,7 +40,6 @@ if /i "%choice%"=="A" goto IMPORT_ALL
 
 set filesParam=
 set selected_count=0
-
 set "input=%choice:,= %"
 
 for %%s in (%input%) do (
@@ -57,32 +59,43 @@ for %%s in (%input%) do (
 )
 
 if !selected_count!==1 (
-    echo Processing: !first_file!
+    echo.
+    echo [处理中] 正在解析: !first_file!
     python scripts/importer_main_v2.py --file "!first_path!"
     if !errorlevel! equ 0 (
-        echo Success
+        powershell -NoProfile -ExecutionPolicy Bypass -File "scripts/selector.ps1" -targetFile "!first_path!"
+        echo [完成] 处理成功。
     ) else (
-        echo Failed
+        echo [跳过] 解析出错，文件保留。
     )
 ) else (
-    echo Processing !selected_count! files
+    echo.
+    echo [处理中] 开始批量处理 !selected_count! 个文件...
     python scripts/importer_main_v2.py --batch --files !filesParam!
     if !errorlevel! equ 0 (
-        echo Batch success
+        for %%s in (%input%) do (
+            for /f "delims=" %%x in ("!fullPath%%s!") do set "filepath=%%x"
+            powershell -NoProfile -ExecutionPolicy Bypass -File "scripts/selector.ps1" -targetFile "!filepath!"
+        )
+        echo [完成] 批量处理成功。
     ) else (
-        echo Batch failed
+        echo [警告] 部分文件处理失败。
     )
 )
 
 echo.
-set /p confirm="Done. Press Enter to return to menu"
+echo -----------------------------------------------------------
+echo 处理完成！
+echo -----------------------------------------------------------
+echo.
+pause
 goto MENU
 
 
 :IMPORT_ALL
 cls
 echo ==================================================
-echo         Import All Files
+echo         导入所有文件
 echo ==================================================
 echo.
 
@@ -93,23 +106,32 @@ for /f "delims=" %%f in ('dir /b /a-d "bills\*.csv" "bills\*.xlsx" "bills\*.xls"
     set "filesParam=!filesParam! "%~dp0bills\%%f""
 )
 
-echo Found %i% files
+echo 找到 %i% 个文件待处理
 echo.
-set /p confirm="Import all files? [Y/N]: "
+set /p confirm="确认导入所有 %i% 个文件？ [Y/N]: "
 
-if /i "%confirm%"=="N" goto MENU
+if /i "!confirm!"=="N" goto MENU
 
+echo.
+echo [处理中] 开始批量处理 %i% 个文件...
 python scripts/importer_main_v2.py --batch --files !filesParam!
 
 if !errorlevel! equ 0 (
     for /f "delims=" %%f in ('dir /b /a-d "bills\*.csv" "bills\*.xlsx" "bills\*.xls" "bills\*.pdf" 2^>nul') do (
         powershell -NoProfile -ExecutionPolicy Bypass -File "scripts/selector.ps1" -targetFile "%~dp0bills\%%f"
     )
-    echo All files processed
+    echo [完成] 全部处理成功。
 ) else (
-    echo Some files failed
+    echo [警告] 部分文件处理失败。
 )
 
 echo.
-set /p confirm="Done. Press Enter to return to menu"
+echo -----------------------------------------------------------
+echo 批量处理完成！
+echo -----------------------------------------------------------
+echo.
+pause
+goto MENU
+
+:MENU
 goto MENU
