@@ -12,12 +12,22 @@ import json
 from pathlib import Path
 from typing import Dict, Set, List, Optional, Any
 
-# 导入 OpenAI SDK
+# 导入 OpenAI SDK 和 httpx（条件化导入）
 try:
     from openai import OpenAI
+    HAS_OPENAI = True
 except ImportError:
-    # 回退到 httpx（用于自定义 API）
+    HAS_OPENAI = False
+
+# httpx 总是尝试导入，因为两种模式都可能需要
+try:
     import httpx
+    HAS_HTTPX = True
+except ImportError:
+    HAS_HTTPX = False
+    # 如果 OpenAI 和 httpx 都不可用，才报错
+    if not HAS_OPENAI:
+        raise ImportError("OpenAI SDK 和 httpx 都不可用，至少需要安装其中一个")
 
 from logger_config import get_logger
 from config_manager import AppConfig
@@ -127,16 +137,16 @@ class AIClassifier:
         self.config = config
         self.openai_cfg = config.openai
 
-        try:
-            # 优先使用 OpenAI SDK
+        if HAS_OPENAI:
+            # 使用 OpenAI SDK
             self.client = OpenAI(
                 api_key=self.openai_cfg.api_key,
                 base_url=self.openai_cfg.api_base
             )
             self.use_httpx = False
             logger.info("使用 OpenAI SDK")
-        except ImportError:
-            # 回退到 httpx（用于自定义 API）
+        elif HAS_HTTPX:
+            # 使用 httpx（OpenAI SDK 不可用）
             self.client = httpx.Client(
                 base_url=self.openai_cfg.api_base,
                 headers={"Authorization": f"Bearer {self.openai_cfg.api_key}"},
@@ -144,6 +154,8 @@ class AIClassifier:
             )
             self.use_httpx = True
             logger.info("使用 httpx（OpenAI SDK 不可用）")
+        else:
+            raise RuntimeError("OpenAI SDK 和 httpx 都不可用")
 
         self.cache: Optional[ClassificationCache] = None
 
@@ -231,10 +243,24 @@ class AIClassifier:
         """
         from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
+        def _get_retry_exceptions():
+            """获取需要重试的异常类型"""
+            exceptions = []
+            if HAS_HTTPX:
+                exceptions.extend([httpx.TimeoutException, httpx.NetworkError])
+            # OpenAI SDK 的异常类型
+            if HAS_OPENAI:
+                try:
+                    from openai import APITimeoutError, APIConnectionError
+                    exceptions.extend([APITimeoutError, APIConnectionError])
+                except ImportError:
+                    pass
+            return tuple(exceptions) if exceptions else (Exception,)
+
         @retry(
             stop=stop_after_attempt(3),
             wait=wait_exponential(multiplier=1, min=4, max=60),
-            retry=retry_if_exception_type((httpx.TimeoutException, httpx.NetworkError)),
+            retry=retry_if_exception_type(_get_retry_exceptions()),
             reraise=True
         )
         def _classify() -> str:
@@ -307,17 +333,20 @@ class AIClassifier:
             logger.debug(f"AI 建议账户: {suggested}")
             return self._validate_and_clean(suggested, allowed_accounts)
 
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 429:
-                raise RateLimitError(f"API 速率限制: {e}")
-            logger.error(f"HTTP 错误: {e}")
-            raise AIClassificationError(f"API 调用失败: {e}") from e
-        except httpx.TimeoutException as e:
-            logger.error(f"API 超时: {e}")
-            raise AIClassificationError(f"API 调用超时: {e}") from e
         except Exception as e:
-            logger.error(f"AI 接口异常: {e}")
-            raise AIClassificationError(f"AI 分类失败: {e}") from e
+            # 条件化异常处理
+            if HAS_HTTPX and isinstance(e, httpx.HTTPStatusError):
+                if e.response.status_code == 429:
+                    raise RateLimitError(f"API 速率限制: {e}")
+                logger.error(f"HTTP 错误: {e}")
+                raise AIClassificationError(f"API 调用失败: {e}") from e
+            elif HAS_HTTPX and isinstance(e, httpx.TimeoutException):
+                logger.error(f"API 超时: {e}")
+                raise AIClassificationError(f"API 调用超时: {e}") from e
+            else:
+                # OpenAI SDK 或其他异常处理
+                logger.error(f"AI 接口异常: {e}")
+                raise AIClassificationError(f"AI 分类失败: {e}") from e
 
     def _build_prompt(
         self,

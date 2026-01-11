@@ -30,8 +30,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 CONFIG_FILE = BASE_DIR / "config" / "config.json"
 MAIN_LEDGER = BASE_DIR / "main.beancount"
 
-# 导入器注册表
-registry = ImportRegistry()
+# 导入全局注册表（已经在base_importer中注册好了所有导入器）
+from base_importer import registry
 
 
 def ensure_dir(file_path: str) -> None:
@@ -154,9 +154,10 @@ def main(csv_file: str, config_path: Path = None) -> bool:
         try:
             importer = registry.get_matching_importer(file_path, config.to_dict())
             transactions = importer.extract_transactions(file_path)
-        except FileFormatError:
+        except FileFormatError as e:
             # 如果新的导入器都不支持，尝试使用旧的逻辑（向后兼容）
-            logger.warning(f"新导入器不支持，尝试旧逻辑: {file_path.name}")
+            logger.warning(f"新导入器不支持文件格式，尝试降级到旧逻辑: {file_path.name}")
+            logger.warning(f"错误详情: {e}")
             return _fallback_main(csv_file, classifier)
 
         if not transactions:

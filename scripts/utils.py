@@ -42,8 +42,12 @@ BANK_KEYWORDS = [
 # 微信关键词
 WECHAT_KEYWORDS = ["微信", "wechat"]
 
-# 支付宝关键词
-ALIPAY_KEYWORDS = ["支付宝", "alipay", "ali-pay", "zhifubao"]
+# 支付宝关键词（增强版）
+ALIPAY_KEYWORDS = [
+    "支付宝", "alipay", "ali-pay", "zhifubao",
+    "alipay_bill", "zfb", "支付宝账单",
+    "alipay_export", "支付宝导出", "ali_export"
+]
 
 
 def detect_file_by_keywords(

@@ -25,7 +25,7 @@ class AlipayImporter(BaseImporter):
     """支付宝账单导入器
 
     支持格式：
-        - CSV 格式（GBK 编码）
+        - CSV 格式（自动检测编码：GBK/GB18030/UTF-8）
         - 文件名包含关键词自动识别
 
     表头格式：
@@ -40,7 +40,7 @@ class AlipayImporter(BaseImporter):
 
     PLATFORM_NAME = "Alipay"
     SUPPORTED_EXTENSIONS = ['.csv']
-    ENCODING = 'gbk'
+    ENCODINGS = ['gbk', 'gb18030', 'utf-8', 'utf-8-sig']  # 优先尝试GBK系列
 
     def supports_file(self, path: Path) -> bool:
         """判断是否为支付宝账单
@@ -72,30 +72,33 @@ class AlipayImporter(BaseImporter):
         Returns:
             是否为有效的支付宝账单
         """
-        try:
-            with open(path, 'r', encoding=self.ENCODING) as f:
-                # 读取前20行查找表头
-                lines = [f.readline() for _ in range(20)]
+        for encoding in self.ENCODINGS:
+            try:
+                with open(path, 'r', encoding=encoding) as f:
+                    # 读取前20行查找表头
+                    lines = [f.readline() for _ in range(20)]
 
-                # 检查是否包含关键表头字段
-                required_cols = ['交易时间', '记录时间']
-                for line in lines:
-                    if any(col in line for col in required_cols):
-                        # 进一步检查是否包含其他必需字段
-                        if all(
-                            h in line or any(h in other for other in lines)
-                            for h in ALIPAY_HEADER[:6]  # 前6个是核心字段
-                        ):
-                            self.logger.debug(f"通过表头验证: {path.name}")
-                            return True
-                return False
+                    # 检查是否包含关键表头字段
+                    required_cols = ['交易时间', '记录时间']
+                    for line in lines:
+                        if any(col in line for col in required_cols):
+                            # 进一步检查是否包含其他必需字段
+                            if all(
+                                h in line or any(h in other for other in lines)
+                                for h in ALIPAY_HEADER[:6]  # 前6个是核心字段
+                            ):
+                                self.logger.debug(f"通过表头验证 ({encoding}): {path.name}")
+                                return True
+                    return False
 
-        except (UnicodeDecodeError, IOError) as e:
-            self.logger.debug(f"表头验证失败: {e}")
-            return False
-        except Exception as e:
-            self.logger.warning(f"验证表头时发生异常: {e}")
-            return False
+            except (UnicodeDecodeError, IOError):
+                continue  # 尝试下一个编码
+            except Exception as e:
+                self.logger.warning(f"验证表头时发生异常 ({encoding}): {e}")
+                continue
+
+        self.logger.debug(f"所有编码都无法验证表头: {path.name}")
+        return False
 
     def extract_transactions(self, path: Path) -> List[Transaction]:
         """提取支付宝交易记录
@@ -136,13 +139,21 @@ class AlipayImporter(BaseImporter):
         Raises:
             FileFormatError: 找不到有效表头
         """
-        # 读取所有行
-        try:
-            with open(path, 'r', encoding=self.ENCODING) as f:
-                lines = f.readlines()
-        except UnicodeDecodeError as e:
-            self.logger.error(f"文件编码错误（尝试 {self.ENCODING}）: {e}")
-            raise FileFormatError(f"无法读取文件编码: {e}")
+        # 读取所有行（支持多编码）
+        lines = None
+        successful_encoding = None
+        for encoding in self.ENCODINGS:
+            try:
+                with open(path, 'r', encoding=encoding) as f:
+                    lines = f.readlines()
+                    successful_encoding = encoding
+                    self.logger.debug(f"成功使用 {encoding} 编码读取文件")
+                    break
+            except UnicodeDecodeError:
+                continue
+
+        if lines is None:
+            raise FileFormatError(f"无法使用任何编码读取文件: {self.ENCODINGS}")
 
         # 查找表头行（支持 "交易时间" 或 "记录时间"）
         header_idx = -1
@@ -154,7 +165,7 @@ class AlipayImporter(BaseImporter):
         if header_idx < 0:
             raise FileFormatError("未找到有效的表头行（包含 '交易时间' 或 '记录时间'）")
 
-        self.logger.debug(f"找到表头行: 第 {header_idx + 1} 行")
+        self.logger.debug(f"找到表头行: 第 {header_idx + 1} 行（编码: {successful_encoding}）")
 
         # 解析 CSV 数据
         import csv
@@ -202,14 +213,22 @@ class AlipayImporter(BaseImporter):
         Returns:
             是否为有效记录
         """
-        # 检查金额是否存在
-        amount = row.get("金额", "").strip()
+        # 检查金额是否存在（支持多种字段名）
+        amount = (
+            row.get("金额", "").strip() or
+            row.get("交易金额", "").strip() or
+            row.get("金额(元)", "").strip()
+        )
         if not amount:
             return False
 
-        # 检查交易状态（只有成功状态才处理）
-        status = row.get("交易状态", "")
-        if not validate_success_status(status):
+        # 检查交易状态（支持多种字段名，只有成功状态才处理）
+        status = (
+            row.get("交易状态", "").strip() or
+            row.get("状态", "").strip() or
+            row.get("交易状态", "").strip()
+        )
+        if status and not validate_success_status(status):
             return False
 
         return True
@@ -228,23 +247,49 @@ class AlipayImporter(BaseImporter):
         Returns:
             标准化的 Transaction 对象
         """
-        # 解析日期
-        date_str = row.get("交易时间", row.get("记录时间", ""))
+        # 解析日期（支持多种字段名）
+        date_str = (
+            row.get("交易时间", "") or
+            row.get("记录时间", "") or
+            row.get("时间", "")
+        )
         date = self.parse_date(date_str, line_num)
 
-        # 解析金额
-        amount = self.parse_amount(row["金额"], line_num)
+        # 解析金额（支持多种字段名）
+        amount_str = (
+            row.get("金额", "") or
+            row.get("交易金额", "") or
+            row.get("金额(元)", "")
+        )
+        amount = self.parse_amount(amount_str, line_num)
 
-        # 判断方向
-        direction = "out" if row.get("收/支") == "支出" else "in"
+        # 判断方向（支持多种字段名和逻辑）
+        direction = row.get("收/支", "").strip()
+        if not direction:
+            # 如果没有收/支字段，尝试根据金额符号或其他字段判断
+            amount_raw = row.get("交易金额", row.get("金额", "0"))
+            if amount_raw.startswith("-"):
+                direction = "支出"
+            else:
+                direction = "收入"
+        direction = "out" if direction in ["支出", "支出", "转出"] else "in"
 
         # 提取字段（使用多层 fallback）
-        payee = row.get("交易对方", "").strip()
-        note = row.get("商品说明", "").strip() or row.get("备注", "").strip()
-        raw_category = row.get("标签", "").strip() or row.get("交易分类", "").strip()
+        payee = row.get("交易对方", "").strip() or row.get("对方", "").strip()
+        note = (
+            row.get("商品说明", "").strip() or
+            row.get("备注", "").strip() or
+            row.get("说明", "").strip()
+        )
+        raw_category = (
+            row.get("标签", "").strip() or
+            row.get("交易分类", "").strip() or
+            row.get("分类", "").strip()
+        )
         raw_account = (
             row.get("来源", "").strip() or
             row.get("账户", "").strip() or
+            row.get("付款方式", "").strip() or
             row.get("收/付款方式", "").strip()
         )
 
@@ -261,5 +306,5 @@ class AlipayImporter(BaseImporter):
 
 
 # 自动注册到全局注册表
-registry = ImportRegistry()
+from base_importer import registry
 registry.register(AlipayImporter)

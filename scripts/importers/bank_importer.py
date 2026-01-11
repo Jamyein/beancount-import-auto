@@ -474,5 +474,5 @@ class BankImporter(BaseImporter):
 
 
 # 自动注册到全局注册表
-registry = ImportRegistry()
+from base_importer import registry
 registry.register(BankImporter)

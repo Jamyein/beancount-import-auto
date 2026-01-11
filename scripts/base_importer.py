@@ -85,6 +85,7 @@ class BaseImporter(ABC):
     PLATFORM_NAME: str = ""
     SUPPORTED_EXTENSIONS: List[str] = []
     ENCODING: str = "utf-8"
+    ENCODINGS: List[str] = ["utf-8", "utf-8-sig", "gbk", "gb18030"]
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         """初始化导入器
