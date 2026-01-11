@@ -13,7 +13,7 @@
 ## 📁 项目结构
 
 ```
-beancount记账 - 副本/
+beancount-import-auto/
 ├── main.beancount          # 主账本文件
 ├── equity.beancount        # 权益和期初余额设置
 ├── config/                 # 配置文件目录
