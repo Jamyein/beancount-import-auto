@@ -1,27 +1,77 @@
 {
-    "openai": {
-        "api_key": "",
-        "api_base": "https://api.deepseek.com",
-        "model": "deepseek-chat"
+  "openai": {
+    "api_key": "",
+    "api_base": "https://api.deepseek.com",
+    "model": "deepseek-chat"
+  },
+  "main_bean_file": "main.beancount",
+  "monthly_dir": "data",
+  "config_dir": "config",
+  "asset_mapping": {
+    "Alipay": "Assets:Alipay:Cash",
+    "wechat": "Assets:WeChat",
+    "Bank": "Assets:Bank"
+  },
+  "my_accounts": [
+    "Expenses:Food",
+    "Expenses:Shopping",
+    "Expenses:Transport",
+    "Expenses:Housing",
+    "Expenses:Entertainment",
+    "Expenses:Health",
+    "Expenses:Car",
+    "Expenses:Other",
+    "Income:Salary",
+    "Income:RedPacket",
+    "Income:Refund",
+    "Equity:Opening-Balances"
+  ],
+  "platforms": {
+    "alipay": {
+      "keywords": ["支付宝", "alipay", "ali-pay", "zhifubao"],
+      "extensions": [".csv"],
+      "field_mappings": {
+        "date": ["交易时间", "记录时间"],
+        "amount": ["金额"],
+        "payee": ["交易对方"],
+        "category": ["标签", "交易分类"],
+        "account": ["来源", "账户", "收/付款方式"],
+        "note": ["商品说明", "备注"]
+      }
     },
-    "main_bean_file": "main.beancount",
-    "monthly_dir": "data",
-    "asset_mapping": {
-        "Alipay": "Assets:Alipay:Cash",
-        "wechat": "Assets:WeChat"
+    "wechat": {
+      "keywords": ["微信", "wechat"],
+      "extensions": [".xlsx", ".xls"],
+      "field_mappings": {
+        "date": ["交易时间"],
+        "amount": ["金额(元)"],
+        "payee": ["交易对方", "对方", "商户"],
+        "category": ["交易类型", "类型"],
+        "account": ["支付方式", "收付款方式"],
+        "note": ["商品", "商品说明", "备注"],
+        "status": ["当前状态", "状态"]
+      }
     },
-    "my_accounts": [
-        "Expenses:Food",
-        "Expenses:Shopping",
-        "Expenses:Transport",
-        "Expenses:Housing",
-        "Expenses:Entertainment",
-        "Expenses:Health",
-        "Expenses:Car",
-        "Expenses:Other",
-        "Income:Salary",
-        "Income:RedPacket",
-        "Income:Refund",
-        "Equity:Opening-Balances"
-    ]
+    "bank": {
+      "keywords": ["bank", "statement", "流水", "account",
+        "icbc", "cmb", "ccb", "boc", "abc",
+        "中国银行", "建设银行", "工商银行", "农业银行",
+        "招商银行", "交通银行", "浦发银行", "中信银行",
+        "光大银行", "华夏银行", "民生银行", "平安银行",
+        "兴业银行", "广发银行", "邮储银行"],
+      "extensions": [".pdf", ".xlsx", ".xls"],
+      "field_mappings": {
+        "date": ["交易日期", "交易时间", "日期", "时间"],
+        "amount": ["金额", "交易金额"],
+        "payee": ["交易对方", "对方户名", "收款人", "付款人"],
+        "category": ["交易类型", "业务类型"],
+        "account": ["账户", "卡号"],
+        "note": ["摘要", "备注", "说明"]
+      }
+    }
+  },
+  "max_file_size": 10485760,
+  "log_level": "INFO",
+  "log_to_file": true,
+  "log_to_console": true
 }
