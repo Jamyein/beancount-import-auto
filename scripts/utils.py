@@ -5,6 +5,7 @@
 """
 import csv
 import io
+import pandas as pd
 from pathlib import Path
 from typing import List, Dict, Optional
 from decimal import Decimal
@@ -267,8 +268,6 @@ def is_empty_row(row: Dict[str, str]) -> bool:
     Returns:
         是否为空行
     """
-    import pandas as pd
-
     for value in row.values():
         if value and not pd.isna(value):
             return False

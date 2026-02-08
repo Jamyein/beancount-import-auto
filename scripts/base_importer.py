@@ -10,6 +10,7 @@ from typing import List, Dict, Any, Type, Optional
 from pathlib import Path
 from decimal import Decimal, InvalidOperation
 from datetime import date, datetime
+import pandas as pd
 
 # 导入日志系统
 from logger_config import get_logger
@@ -237,8 +238,6 @@ class BaseImporter(ABC):
         Raises:
             TransactionValidationError: 日期格式无效
         """
-        import pandas as pd
-
         date_formats = [
             '%Y-%m-%d',
             '%Y/%m/%d',
@@ -294,8 +293,6 @@ class BaseImporter(ABC):
         Returns:
             清理后的字符串
         """
-        import pandas as pd
-
         if value is None:
             return default
 
