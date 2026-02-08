@@ -22,3 +22,21 @@ Thumbs.db
 # Cache
 .cache/
 *.tmp
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Project specific (Beancount Import Auto)
+# Configuration files (may contain sensitive info)
+config/config.json
+config/mapping.json
+
+# Data directories
+# Note: .gitkeep files are preserved to maintain directory structure
+data/
+bills/
+archived/
+logs/

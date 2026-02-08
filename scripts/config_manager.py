@@ -4,9 +4,16 @@
 提供统一的配置加载、验证和管理功能
 """
 import json
+import os
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
+
+try:
+    from dotenv import load_dotenv
+    HAS_DOTENV = True
+except ImportError:
+    HAS_DOTENV = False
 
 from logger_config import get_logger
 
@@ -74,6 +81,15 @@ class AppConfig:
 
         logger.info(f"加载配置文件: {config_path}")
 
+        # 加载 .env 文件（如果存在）
+        if HAS_DOTENV:
+            env_path = config_path.parent.parent / ".env"
+            if env_path.exists():
+                load_dotenv(env_path)
+                logger.info("已加载 .env 文件")
+            else:
+                logger.warning(".env 文件不存在，将使用 config.json 中的配置")
+
         with open(config_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
 
@@ -81,7 +97,7 @@ class AppConfig:
         cls._validate_config(data)
 
         # 构建配置对象
-        openai_cfg = OpenAIConfig(**data.get("openai", {}))
+        openai_cfg = cls._load_openai_config(data)
 
         # 平台配置
         platforms_data = data.get("platforms", {})
@@ -108,6 +124,39 @@ class AppConfig:
             log_to_console=data.get("log_to_console", True)
         )
 
+    @classmethod
+    def _load_openai_config(cls, data: Dict[str, Any]) -> OpenAIConfig:
+        """加载 OpenAI 配置，优先从环境变量读取
+
+        Args:
+            data: 配置文件数据
+
+        Returns:
+            OpenAI 配置对象
+        """
+        # 优先从环境变量读取
+        api_key = os.getenv("OPENAI_API_KEY")
+        api_base = os.getenv("OPENAI_API_BASE")
+        model = os.getenv("OPENAI_MODEL")
+
+        # 如果环境变量存在，使用环境变量
+        if api_key is not None:
+            logger.info("使用环境变量中的 OpenAI 配置")
+            return OpenAIConfig(
+                api_key=api_key,
+                api_base=api_base or "https://api.deepseek.com",
+                model=model or "deepseek-chat"
+            )
+
+        # 回退到 config.json 中的配置
+        if "openai" in data:
+            logger.info("使用 config.json 中的 OpenAI 配置")
+            return OpenAIConfig(**data["openai"])
+
+        # 如果都没有，创建默认配置
+        logger.warning("未找到 OpenAI 配置，使用默认配置")
+        return OpenAIConfig()
+
     @staticmethod
     def _validate_config(data: Dict[str, Any]) -> None:
         """验证配置数据
@@ -118,20 +167,18 @@ class AppConfig:
         Raises:
             ValueError: 配置验证失败
         """
-        # 验证 OpenAI 配置
-        if "openai" not in data:
-            raise ValueError("配置缺少 'openai' 节点")
+        # 验证 OpenAI 配置（如果存在于 config.json 中）
+        if "openai" in data:
+            openai_cfg = data["openai"]
+            required_openai_fields = ["api_key", "api_base", "model"]
+            for field in required_openai_fields:
+                if field not in openai_cfg:
+                    raise ValueError(f"OpenAI 配置缺少必需字段: {field}")
 
-        openai_cfg = data["openai"]
-        required_openai_fields = ["api_key", "api_base", "model"]
-        for field in required_openai_fields:
-            if field not in openai_cfg:
-                raise ValueError(f"OpenAI 配置缺少必需字段: {field}")
-
-        # 验证 api_base 为有效的 URI
-        api_base = openai_cfg.get("api_base", "")
-        if not (api_base.startswith("http://") or api_base.startswith("https://")):
-            raise ValueError(f"api_base 必须是有效的 URL: {api_base}")
+            # 验证 api_base 为有效的 URI
+            api_base = openai_cfg.get("api_base", "")
+            if not (api_base.startswith("http://") or api_base.startswith("https://")):
+                raise ValueError(f"api_base 必须是有效的 URL: {api_base}")
 
         # 验证账户映射
         if "asset_mapping" in data:
@@ -148,15 +195,13 @@ class AppConfig:
     def save(self, config_path: Path) -> None:
         """保存配置到文件
 
+        注意：OpenAI 配置不再保存在 config.json 中，应在 .env 文件中管理
+
         Args:
             config_path: 配置文件路径
         """
         data = {
-            "openai": {
-                "api_key": self.openai.api_key,
-                "api_base": self.openai.api_base,
-                "model": self.openai.model
-            },
+            # OpenAI 配置不再保存在 config.json 中
             "main_bean_file": self.main_bean_file,
             "monthly_dir": self.monthly_dir,
             "config_dir": self.config_dir,
@@ -202,15 +247,13 @@ class AppConfig:
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式
 
+        注意：OpenAI 配置不在此字典中，应从 .env 文件获取
+
         Returns:
             配置字典
         """
         return {
-            "openai": {
-                "api_key": self.openai.api_key,
-                "api_base": self.openai.api_base,
-                "model": self.openai.model
-            },
+            # OpenAI 配置不在字典中
             "main_bean_file": self.main_bean_file,
             "monthly_dir": self.monthly_dir,
             "config_dir": self.config_dir,

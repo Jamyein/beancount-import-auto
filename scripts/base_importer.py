@@ -124,7 +124,7 @@ class BaseImporter(ABC):
         """
         pass
 
-    def validate_transaction(self, tx: Transaction) -> bool:
+    def validate_transaction(self, tx: Transaction, allow_negative: bool = False) -> bool:
         """验证单条交易记录
 
         执行以下验证：
@@ -134,6 +134,7 @@ class BaseImporter(ABC):
 
         Args:
             tx: 交易记录
+            allow_negative: 是否允许负数金额（用于微信等支持支出的场景）
 
         Returns:
             是否通过验证
@@ -144,17 +145,26 @@ class BaseImporter(ABC):
         # 必要字段验证
         required_fields = ['date', 'payee', 'amount']
         for field in required_fields:
-            if not getattr(tx, field):
-                self.logger.warning(f"交易记录缺少必要字段: {field}")
+            if getattr(tx, field) is None:
                 raise TransactionValidationError(f"缺少字段: {field}")
 
-        # 金额验证（必须为正数，小于1亿）
-        if tx.amount <= 0:
-            self.logger.warning(f"无效的交易金额: {tx.amount}")
-            raise TransactionValidationError(f"金额必须大于0: {tx.amount}")
-        if tx.amount > MAX_AMOUNT:
-            self.logger.warning(f"金额异常（超过1亿）: {tx.amount}")
-            raise TransactionValidationError(f"金额超过上限: {tx.amount}")
+        # 金额验证
+        if allow_negative:
+            # 允许负数，但限制绝对值范围
+            if tx.amount == 0:
+                self.logger.warning(f"无效的交易金额: {tx.amount}")
+                raise TransactionValidationError(f"金额不能为0: {tx.amount}")
+            if abs(tx.amount) > MAX_AMOUNT:
+                self.logger.warning(f"金额异常（超过1亿）: {tx.amount}")
+                raise TransactionValidationError(f"金额超过上限: {tx.amount}")
+        else:
+            # 必须为正数，小于1亿
+            if tx.amount <= 0:
+                self.logger.warning(f"无效的交易金额: {tx.amount}")
+                raise TransactionValidationError(f"金额必须大于0: {tx.amount}")
+            if tx.amount > MAX_AMOUNT:
+                self.logger.warning(f"金额异常（超过1亿）: {tx.amount}")
+                raise TransactionValidationError(f"金额超过上限: {tx.amount}")
 
         # 日期验证（2000年-今天）
         if tx.date < MIN_DATE:

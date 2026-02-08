@@ -1,16 +1,21 @@
 {
-  "openai": {
-    "api_key": "",
-    "api_base": "https://api.deepseek.com",
-    "model": "deepseek-chat"
-  },
   "main_bean_file": "main.beancount",
   "monthly_dir": "data",
   "config_dir": "config",
   "asset_mapping": {
     "Alipay": "Assets:Alipay:Cash",
     "wechat": "Assets:WeChat",
-    "Bank": "Assets:Bank"
+    "Bank": "Assets:Bank",
+    "零钱通": "Assets:Alipay:YuEBaog",
+    "余额": "Assets:Alipay:Cash",
+    "中国银行": "Assets:Bank:BOC",
+    "中国银行储蓄卡": "Assets:Bank:BOC",
+    "工商银行": "Assets:Bank:ICBC",
+    "建设银行": "Assets:Bank:CCB",
+    "招商银行": "Assets:Bank:CMB",
+    "农业银行": "Assets:Bank:ABC",
+    "交通银行": "Assets:Bank:BCOM",
+    "储蓄卡": "Assets:Bank"
   },
   "my_accounts": [
     "Expenses:Food",

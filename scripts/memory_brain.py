@@ -1,33 +1,32 @@
 # memory_brain.py
 import sys
-import json
 from pathlib import Path
-from openai import OpenAI
 
 sys.dont_write_bytecode = True
 
 # ---------- paths ----------
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-CONFIG_FILE = BASE_DIR / "config" / "config.json"
 CACHE_FILE = BASE_DIR / "config" / "mapping.json"
 
 # ---------- load config ----------
 
-with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-    config = json.load(f)
+from config_manager import get_config
 
-openai_cfg = config["openai"]
-ALLOWED_ACCOUNTS = set(config.get("my_accounts", []))
+config = get_config()
+openai_cfg = config.openai
+ALLOWED_ACCOUNTS = set(config.my_accounts)
 
 # ---------- OpenAI client (DeepSeek compatible) ----------
 
+from openai import OpenAI
+
 client = OpenAI(
-    api_key=openai_cfg["api_key"],
-    base_url=openai_cfg["api_base"]
+    api_key=openai_cfg.api_key,
+    base_url=openai_cfg.api_base
 )
 
-MODEL = openai_cfg["model"]
+MODEL = openai_cfg.model
 
 # ---------- Memory Brain ----------
 
@@ -114,11 +113,11 @@ class MemoryBrain:
         print(f"   账单原始分类：{raw_category}")
 
         # 2. 构建本次交易合法的账户集合
-        current_allowed = set(config.get("my_accounts", []))
-        
+        current_allowed = set(config.my_accounts)
+
         # 资产映射检测（转账处理）
         matched_asset_account = None
-        for kw, acc in config.get("asset_mapping", {}).items():
+        for kw, acc in config.asset_mapping.items():
             if kw.lower() in payee.lower():
                 matched_asset_account = acc
                 break

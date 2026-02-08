@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 import pandas as pd
 
-from base_importer import BaseImporter, Transaction, ImportRegistry
+from base_importer import BaseImporter, Transaction, ImportRegistry, FileFormatError
 from utils import (
     WECHAT_KEYWORDS,
     detect_file_by_keywords,
@@ -49,6 +49,7 @@ class WeChatImporter(BaseImporter):
         "category": ["交易类型", "类型", "category"],
         "account": ["支付方式", "收付款方式", "account"],
         "status": ["当前状态", "状态", "status"],
+        "income_expense": ["收/支", "收支", "income_expense"],
     }
 
     def supports_file(self, path: Path) -> bool:
@@ -117,10 +118,10 @@ class WeChatImporter(BaseImporter):
 
             self.logger.debug(f"找到表头行: 第 {header_row_index + 1} 行")
 
-            # 读取完整数据（跳过表头之前的行）
+            # 读取完整数据（跳过表头之前的行，保留表头行作为header）
             df = pd.read_excel(
                 path,
-                skiprows=header_row_index + 1,
+                skiprows=header_row_index,
                 dtype=str,
                 engine='openpyxl'
             )
@@ -152,12 +153,18 @@ class WeChatImporter(BaseImporter):
             表头行索引（0-based），未找到返回 -1
         """
         try:
-            df_raw = pd.read_excel(path, dtype=str, nrows=100)
+            from openpyxl import load_workbook
 
-            for i, row in df_raw.iterrows():
-                if "交易时间" in row.values:
-                    return i
+            wb = load_workbook(path, data_only=True)
+            ws = wb.active
 
+            for i in range(1, min(50, ws.max_row + 1)):
+                row = [cell.value for cell in ws[i]]
+                if any("交易时间" in str(cell) for cell in row if cell is not None):
+                    wb.close()
+                    return i - 1
+
+            wb.close()
             return -1
 
         except Exception as e:
@@ -184,6 +191,7 @@ class WeChatImporter(BaseImporter):
         note_col = find_column_name(df, self.COLUMN_MAPPINGS["note"])
         category_col = find_column_name(df, self.COLUMN_MAPPINGS["category"])
         account_col = find_column_name(df, self.COLUMN_MAPPINGS["account"])
+        income_expense_col = find_column_name(df, self.COLUMN_MAPPINGS["income_expense"])
 
         # 验证必需列
         if not amount_col or not date_col:
@@ -192,7 +200,7 @@ class WeChatImporter(BaseImporter):
                 f"{self.COLUMN_MAPPINGS['date']}）"
             )
 
-        self.logger.debug(f"列映射: amount={amount_col}, date={date_col}")
+        self.logger.debug(f"列映射: amount={amount_col}, date={date_col}, income_expense={income_expense_col}")
 
         # 逐行解析
         for idx, row in df.iterrows():
@@ -213,6 +221,18 @@ class WeChatImporter(BaseImporter):
                 # 解析金额
                 amount_raw = str(row.get(amount_col))
                 amount = self.parse_amount(amount_raw, idx + 2)
+
+                # 根据收支类型调整金额符号
+                if income_expense_col:
+                    income_expense = str(row.get(income_expense_col, ""))
+                    if income_expense == "支出":
+                        amount = -abs(amount)
+                    elif income_expense == "收入":
+                        amount = abs(amount)
+                    elif income_expense == "中性交易":
+                        pass
+                    else:
+                        self.logger.debug(f"未知收支类型: {income_expense}")
 
                 # 解析日期
                 date_raw = str(row.get(date_col))
@@ -240,8 +260,8 @@ class WeChatImporter(BaseImporter):
                     status="success"
                 )
 
-                # 验证交易
-                self.validate_transaction(tx)
+                # 验证交易（微信支持负数支出）
+                self.validate_transaction(tx, allow_negative=True)
                 transactions.append(tx)
 
             except Exception as e:
