@@ -17,7 +17,7 @@ from typing import Dict, Tuple, List
 from logger_config import get_logger, setup_logging
 from config_manager import AppConfig, get_config
 from base_importer import BaseImporter, Transaction, ImportRegistry, FileFormatError
-from ai_classifier import create_classifier, create_cache, MemoryBrain  # 兼容原接口
+from memory_brain import MemoryBrain
 from utils import format_beancount_entry, ensure_directory, detect_asset_account
 
 # 禁止生成 .pyc 文件
@@ -155,10 +155,8 @@ def main(csv_file: str, config_path: Path = None) -> bool:
             importer = registry.get_matching_importer(file_path, config.to_dict())
             transactions = importer.extract_transactions(file_path)
         except FileFormatError as e:
-            # 如果新的导入器都不支持，尝试使用旧的逻辑（向后兼容）
-            logger.warning(f"新导入器不支持文件格式，尝试降级到旧逻辑: {file_path.name}")
-            logger.warning(f"错误详情: {e}")
-            return _fallback_main(csv_file, classifier)
+            logger.error(f"不支持的文件格式: {file_path.name} - {e}")
+            return False
 
         if not transactions:
             logger.warning("未找到有效数据或解析结果为空")
@@ -230,7 +228,7 @@ def main(csv_file: str, config_path: Path = None) -> bool:
 
 
 def _fallback_main(csv_file: str, classifier: MemoryBrain) -> bool:
-    """降级主流程（使用旧逻辑，向后兼容）
+    """降级主流程（保留接口，逻辑已合并到主流程）
 
     Args:
         csv_file: CSV文件路径
@@ -239,46 +237,8 @@ def _fallback_main(csv_file: str, classifier: MemoryBrain) -> bool:
     Returns:
         bool: 导入是否成功
     """
-    # 导入旧的解析器
-    try:
-        from importer_alipay import is_alipay_file, parse_alipay
-        from importer_wechat import is_wechat_file, parse_wechat
-        from importer_bank import is_bank_file, parse_bank
-    except ImportError as e:
-        logger.error(f"无法导入旧解析器: {e}")
-        return False
-
-    file_path = Path(csv_file)
-    txs = []
-
-    # 1. 识别并解析文件
-    try:
-        if is_alipay_file(file_path):
-            logger.info(f"识别为支付宝账单: {file_path.name}")
-            txs = parse_alipay(file_path)
-        elif is_wechat_file(file_path):
-            logger.info(f"识别为微信账单: {file_path.name}")
-            txs = parse_wechat(file_path)
-        elif is_bank_file(file_path):
-            logger.info(f"识别为银行账单: {file_path.name}")
-            txs = parse_bank(file_path)
-        else:
-            logger.info(f"无法识别账单类型: {file_path.name}")
-            return False
-    except Exception as e:
-        logger.error(f"解析文件失败: {e}")
-        return False
-
-    if not txs:
-        logger.info("未找到有效数据或解析结果为空")
-        return False
-
-    logger.info(f"共解析到 {len(txs)} 条交易")
-
-    # 继续使用旧的处理逻辑...
-    # （这里保持原代码的兼容性）
-
-    return True
+    logger.warning(f"文件格式不受支持: {csv_file}")
+    return False
 
 
 def list_bills(directory: str = "bills") -> List[str]:
@@ -314,35 +274,33 @@ def process_multiple(csv_files: List[str], config_path: Path = None) -> Dict[str
         每个文件的处理结果字典 {文件路径: 是否成功}
     """
     results = {}
-    
+
+    # 初始化配置和日志（只初始化一次）
+    config = get_config(config_path)
+    setup_logging(
+        level=config.log_level,
+        log_to_file=config.log_to_file,
+        log_to_console=config.log_to_console
+    )
+    classifier = MemoryBrain()
+
     for csv_file in csv_files:
         logger.info(f"{'='*60}")
         logger.info(f"开始处理: {csv_file}")
-        
+
         try:
-            # 初始化组件（每个文件独立初始化，避免状态污染）
-            config = get_config(config_path)
-            setup_logging(
-                level=config.log_level,
-                log_to_file=config.log_to_file,
-                log_to_console=config.log_to_console
-            )
-            
-            # 创建新的 AI 分类器和缓存
-            classifier = MemoryBrain()
-            
             success = main(csv_file, config_path)
             results[csv_file] = success
-            
+
             if success:
-                logger.info(f"✅ 成功: {csv_file}")
+                logger.info(f"成功: {csv_file}")
             else:
-                logger.error(f"❌ 失败: {csv_file}")
-                
+                logger.error(f"失败: {csv_file}")
+
         except Exception as e:
-            logger.error(f"❌ 异常: {csv_file} - {e}")
+            logger.error(f"异常: {csv_file} - {e}")
             results[csv_file] = False
-    
+
     return results
 
 
@@ -356,36 +314,34 @@ def main_batch(csv_files: List[str], config_path: Path = None) -> bool:
     Returns:
         是否全部成功
     """
-    logger.info(f"{'='*60}")
+    logger.info("=" * 60)
     logger.info(f"批量处理模式: {len(csv_files)} 个文件")
-    logger.info(f"{'='*60}")
-    
+    logger.info("=" * 60)
+
     if not csv_files:
         logger.error("文件列表为空")
         return False
-    
-    # 处理所有文件
+
     results = process_multiple(csv_files, config_path)
-    
-    # 统计结果
+
     total = len(results)
     success_count = sum(1 for r in results.values() if r)
     failed_count = total - success_count
-    
-    logger.info(f"{'='*60}")
-    logger.info(f"批量处理完成")
-    logger.info(f"{'='*60}")
+
+    logger.info("=" * 60)
+    logger.info("批量处理完成")
+    logger.info("=" * 60)
     logger.info(f"总计: {total} 个文件")
     logger.info(f"成功: {success_count} 个")
     logger.info(f"失败: {failed_count} 个")
-    logger.info(f"{'='*60}")
-    
+    logger.info("=" * 60)
+
     if failed_count > 0:
         logger.error("失败文件列表:")
         for file_path, success in results.items():
             if not success:
                 logger.error(f"  - {file_path}")
-    
+
     return failed_count == 0
 
 

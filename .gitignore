@@ -38,5 +38,11 @@ config/mapping.json
 # Note: .gitkeep files are preserved to maintain directory structure
 data/
 bills/
-archived/
 logs/
+tests/__pycache__/
+.pytest_cache/
+/.sisyphus
+AGENTS.md
+scripts/.last_beancount
+/tests
+/tests
