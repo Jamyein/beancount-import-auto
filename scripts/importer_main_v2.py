@@ -34,46 +34,29 @@ MAIN_LEDGER = BASE_DIR / "main.beancount"
 from base_importer import registry
 
 
-def ensure_dir(file_path: str) -> None:
-    """确保目标文件的目录存在
-
-    Args:
-        file_path: 文件路径
-
-    Raises:
-        OSError: 目录创建失败
-    """
-    try:
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-    except OSError as e:
-        logger.error(f"创建目录失败: {e}")
-        raise
-
-
 def update_main_ledger(rel_path: str) -> None:
     """在主账本中追加 include 语句
 
     Args:
         rel_path: 相对路径
     """
-    # 统一路径格式为斜杠，适配 Beancount 语法
     formatted_path = rel_path.replace('\\', '/')
     include_line = f'include "{formatted_path}"'
 
-    try:
-        content = ""
-        if MAIN_LEDGER.exists():
-            content = MAIN_LEDGER.read_text(encoding="utf-8")
+    if not MAIN_LEDGER.exists():
+        MAIN_LEDGER.write_text(include_line + "\n", encoding="utf-8")
+        logger.info(f"已创建主账本并关联新文件: {formatted_path}")
+        return
 
-        if include_line not in content:
-            with open(MAIN_LEDGER, "a", encoding="utf-8") as f:
-                if content and not content.endswith('\n'):
-                    f.write("\n")
-                f.write(f"{include_line}\n")
-            logger.info(f"已在主账本中关联新文件: {formatted_path}")
-    except IOError as e:
-        logger.error(f"更新主账本失败: {e}")
-        raise
+    content = MAIN_LEDGER.read_text(encoding="utf-8")
+    if include_line in content:
+        return
+
+    with open(MAIN_LEDGER, "a", encoding="utf-8") as f:
+        if content and not content.endswith('\n'):
+            f.write("\n")
+        f.write(f"{include_line}\n")
+    logger.info(f"已在主账本中关联新文件: {formatted_path}")
 
 
 def process_transaction(
@@ -194,7 +177,7 @@ def main(csv_file: str, config_path: Path = None) -> bool:
             for month, entries in entries_by_month.items():
                 # 确定分卷文件路径 (例如: data/202512.beancount)
                 target_file = os.path.join(BASE_DIR / config.monthly_dir, f"{month}.beancount")
-                ensure_dir(target_file)
+                ensure_directory(Path(target_file))
 
                 # 追加写入月份文件
                 try:

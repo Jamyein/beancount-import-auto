@@ -212,12 +212,8 @@ class BaseImporter(ABC):
             TransactionValidationError: 金额格式无效
         """
         try:
-            cleaned = (amount_str
-                      .replace("¥", "")
-                      .replace("￥", "")
-                      .replace("$", "")
-                      .replace(" ", "")
-                      .replace(",", ""))
+            trans_table = str.maketrans("", "", "¥￥$ ,")
+            cleaned = amount_str.translate(trans_table)
             return abs(Decimal(cleaned))
         except (ValueError, InvalidOperation, AttributeError) as e:
             self.logger.error(f"第{line_num}行金额解析失败: '{amount_str}' - {e}")

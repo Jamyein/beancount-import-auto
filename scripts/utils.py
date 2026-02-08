@@ -181,13 +181,8 @@ def clean_amount_string(amount_str: str) -> str:
     Returns:
         清理后的金额字符串
     """
-    return (amount_str
-            .replace("¥", "")
-            .replace("￥", "")
-            .replace("$", "")
-            .replace(" ", "")
-            .replace(",", "")
-            .strip())
+    trans_table = str.maketrans("", "", "¥￥$ ,")
+    return amount_str.translate(trans_table)
 
 
 def detect_asset_account(
@@ -268,10 +263,7 @@ def is_empty_row(row: Dict[str, str]) -> bool:
     Returns:
         是否为空行
     """
-    for value in row.values():
-        if value and not pd.isna(value):
-            return False
-    return True
+    return all(not value or pd.isna(value) for value in row.values())
 
 
 def find_column_name(

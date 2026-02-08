@@ -222,17 +222,15 @@ class WeChatImporter(BaseImporter):
                 amount_raw = str(row.get(amount_col))
                 amount = self.parse_amount(amount_raw, idx + 2)
 
-                # 根据收支类型调整金额符号
-                if income_expense_col:
-                    income_expense = str(row.get(income_expense_col, ""))
-                    if income_expense == "支出":
-                        amount = -abs(amount)
-                    elif income_expense == "收入":
-                        amount = abs(amount)
-                    elif income_expense == "中性交易":
-                        pass
-                    else:
-                        self.logger.debug(f"未知收支类型: {income_expense}")
+    # 根据收支类型调整金额符号
+    if income_expense_col:
+        income_expense = str(row.get(income_expense_col, ""))
+        sign_map = {"支出": -1, "收入": 1}
+        multiplier = sign_map.get(income_expense)
+        if multiplier is not None:
+            amount = amount * multiplier
+        elif income_expense and income_expense != "中性交易":
+            self.logger.debug(f"未知收支类型: {income_expense}")
 
                 # 解析日期
                 date_raw = str(row.get(date_col))
